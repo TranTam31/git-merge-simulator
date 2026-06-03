@@ -194,7 +194,35 @@ export function threeWayMerge(base, current, incoming) {
         addMerged(curIns);
       } else {
         // Both inserted different content → conflict
-        addConflict(curIns, incIns);
+        // Match Git's behavior: strip common prefix and suffix lines from the conflict
+        let commonPrefixCount = 0;
+        const minLen = Math.min(curIns.length, incIns.length);
+        while (commonPrefixCount < minLen && curIns[commonPrefixCount] === incIns[commonPrefixCount]) {
+          commonPrefixCount++;
+        }
+
+        let commonSuffixCount = 0;
+        const maxSuffixLen = minLen - commonPrefixCount;
+        while (
+          commonSuffixCount < maxSuffixLen &&
+          curIns[curIns.length - 1 - commonSuffixCount] === incIns[incIns.length - 1 - commonSuffixCount]
+        ) {
+          commonSuffixCount++;
+        }
+
+        if (commonPrefixCount > 0) {
+          addMerged(curIns.slice(0, commonPrefixCount));
+        }
+
+        const curMid = curIns.slice(commonPrefixCount, curIns.length - commonSuffixCount);
+        const incMid = incIns.slice(commonPrefixCount, incIns.length - commonSuffixCount);
+        if (curMid.length > 0 || incMid.length > 0) {
+          addConflict(curMid, incMid);
+        }
+
+        if (commonSuffixCount > 0) {
+          addMerged(curIns.slice(curIns.length - commonSuffixCount));
+        }
       }
     }
 

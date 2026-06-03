@@ -1,6 +1,5 @@
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import Editor from '@monaco-editor/react';
-import { presets } from '../data/presets';
 
 const LABELS = {
   base: { title: 'BASE', subtitle: 'Common ancestor', color: 'text-gray-400', border: 'border-gray-600', badge: 'bg-gray-700 text-gray-300', dot: 'bg-gray-400' },
@@ -77,19 +76,7 @@ function EditorPane({ id, value, onChange }) {
 }
 
 export default function InputPanel({ base, current, incoming, onBaseChange, onCurrentChange, onIncomingChange, onMerge }) {
-  const [selectedPreset, setSelectedPreset] = useState('');
-
-  function loadPreset(presetId) {
-    const preset = presets.find(p => p.id === presetId);
-    if (!preset) return;
-    setSelectedPreset(presetId);
-    onBaseChange(preset.base);
-    onCurrentChange(preset.current);
-    onIncomingChange(preset.incoming);
-  }
-
   function clearAll() {
-    setSelectedPreset('');
     onBaseChange('');
     onCurrentChange('');
     onIncomingChange('');
@@ -98,33 +85,10 @@ export default function InputPanel({ base, current, incoming, onBaseChange, onCu
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <label htmlFor="preset-select" className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
-            Load example:
-          </label>
-          <select
-            id="preset-select"
-            value={selectedPreset}
-            onChange={(e) => loadPreset(e.target.value)}
-            className="bg-editor-surface border border-editor-border text-gray-200 text-sm rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer hover:border-gray-500 transition-colors"
-          >
-            <option value="">— Select a preset —</option>
-            {presets.map(p => (
-              <option key={p.id} value={p.id}>{p.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {selectedPreset && (
-          <span className="text-xs text-gray-500 italic">
-            {presets.find(p => p.id === selectedPreset)?.description}
-          </span>
-        )}
-
+      <div className="flex items-center justify-end">
         <button
           onClick={clearAll}
-          className="ml-auto text-xs text-gray-500 hover:text-gray-300 transition-colors px-2 py-1 rounded hover:bg-editor-hover"
+          className="text-xs text-gray-500 hover:text-gray-300 transition-colors px-2 py-1 rounded hover:bg-editor-hover"
         >
           Clear all
         </button>

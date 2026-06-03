@@ -2,76 +2,85 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import CompareDiff from './CompareDiff';
 
-/**
- * MergeResult — Monaco-based merge result display with inline conflict resolution.
- * Uses Monaco decorations for colored conflict backgrounds and viewZones for action buttons.
- */
-export default function MergeResult({ hunks, resolutions, onResolve }) {
+// Helper parser to find conflict markers in editor text
+function parseConflicts(text) {
+  if (!text) return [];
+  const lines = text.split('\n');
+  const meta = [];
+  let currentBlock = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineNumber = i + 1; // Monaco line numbers are 1-indexed
+
+    if (line.startsWith('<<<<<<<')) {
+      currentBlock = {
+        hunkIndex: meta.length,
+        markerStart: lineNumber,
+        currentLines: [],
+        incomingLines: [],
+        currentStart: lineNumber + 1,
+        currentEnd: null,
+        sepLine: null,
+        incomingStart: null,
+        incomingEnd: null,
+        markerEnd: null,
+      };
+    } else if (line.startsWith('=======') && currentBlock) {
+      currentBlock.currentEnd = lineNumber - 1;
+      currentBlock.sepLine = lineNumber;
+      currentBlock.incomingStart = lineNumber + 1;
+    } else if (line.startsWith('>>>>>>>') && currentBlock) {
+      currentBlock.incomingEnd = lineNumber - 1;
+      currentBlock.markerEnd = lineNumber;
+
+      // Extract raw lines
+      currentBlock.currentLines = lines.slice(currentBlock.currentStart - 1, currentBlock.currentEnd);
+      currentBlock.incomingLines = lines.slice(currentBlock.incomingStart - 1, currentBlock.incomingEnd);
+
+      meta.push(currentBlock);
+      currentBlock = null;
+    }
+  }
+
+  return meta;
+}
+
+export default function MergeResult({ hunks, currentFile, incomingFile }) {
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const viewZoneIdsRef = useRef([]);
   const decorationCollectionRef = useRef(null);
-  const hunksRef = useRef(hunks);
-  const onResolveRef = useRef(onResolve);
+  const [conflicts, setConflicts] = useState([]);
+  const [totalConflictsInitial, setTotalConflictsInitial] = useState(0);
   const [compareInfo, setCompareInfo] = useState(null);
   const [copied, setCopied] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
+  const [linesCount, setLinesCount] = useState(1);
 
-  // Keep refs up-to-date for DOM event handlers (viewZone buttons)
-  hunksRef.current = hunks;
-  onResolveRef.current = onResolve;
-
-  // Stats
-  const totalConflicts = hunks.filter(h => h.type === 'conflict').length;
-  const resolvedCount = hunks.filter((h, i) => h.type === 'conflict' && resolutions[i] !== undefined).length;
-  const remaining = totalConflicts - resolvedCount;
-  const allResolved = remaining === 0;
-
-  // Build full text content + conflict line metadata
-  const { text, conflictMeta } = useMemo(() => {
+  // Generate initial merge text with markers
+  const initialText = useMemo(() => {
     const lines = [];
-    const meta = [];
-
-    hunks.forEach((hunk, i) => {
+    hunks.forEach((hunk) => {
       if (hunk.type === 'merged') {
         lines.push(...hunk.lines);
       } else if (hunk.type === 'conflict') {
-        if (resolutions[i] !== undefined) {
-          // Resolved — show clean lines
-          lines.push(...resolutions[i]);
-        } else {
-          // Unresolved — show conflict markers
-          const markerStart = lines.length + 1; // 1-indexed for Monaco
-          lines.push('<<<<<<< HEAD (Current Change)');
-          const currentStart = lines.length + 1;
-          lines.push(...hunk.current);
-          const currentEnd = lines.length;
-          lines.push('=======');
-          const sepLine = lines.length;
-          const incomingStart = lines.length + 1;
-          lines.push(...hunk.incoming);
-          const incomingEnd = lines.length;
-          lines.push('>>>>>>> Incoming Change');
-          const markerEnd = lines.length;
-
-          meta.push({
-            hunkIndex: i,
-            markerStart,
-            currentStart,
-            currentEnd,
-            sepLine,
-            incomingStart,
-            incomingEnd,
-            markerEnd,
-          });
-        }
+        lines.push('<<<<<<< HEAD (Current Change)');
+        lines.push(...hunk.current);
+        lines.push('=======');
+        lines.push(...hunk.incoming);
+        lines.push('>>>>>>> Incoming Change');
       }
     });
+    return lines.join('\n');
+  }, [hunks]);
 
-    return { text: lines.join('\n'), conflictMeta: meta };
-  }, [hunks, resolutions]);
+  // Compute stats
+  const remaining = conflicts.length;
+  const resolvedCount = totalConflictsInitial - remaining;
+  const allResolved = remaining === 0;
 
-  // Apply decorations and viewZones to the Monaco editor
+  // Apply decorations and viewZones based on current parsed conflicts
   const applyDecorationsAndZones = useCallback(() => {
     const editor = editorRef.current;
     const monaco = monacoRef.current;
@@ -85,8 +94,7 @@ export default function MergeResult({ hunks, resolutions, onResolve }) {
 
     // --- Build decorations ---
     const newDecorations = [];
-
-    conflictMeta.forEach(cm => {
+    conflicts.forEach(cm => {
       // Marker lines (<<<, ===, >>>)
       [cm.markerStart, cm.sepLine, cm.markerEnd].forEach(line => {
         newDecorations.push({
@@ -124,12 +132,11 @@ export default function MergeResult({ hunks, resolutions, onResolve }) {
 
     // --- Add viewZones with action buttons (like VSCode codelens) ---
     editor.changeViewZones(accessor => {
-      conflictMeta.forEach(cm => {
+      conflicts.forEach(cm => {
         const domNode = document.createElement('div');
         domNode.className = 'merge-action-bar';
         domNode.style.pointerEvents = 'auto';
 
-        // Prevent Monaco from intercepting clicks and mouse/pointer down events
         const stopProp = (e) => e.stopPropagation();
         domNode.addEventListener('mousedown', stopProp);
         domNode.addEventListener('pointerdown', stopProp);
@@ -139,27 +146,48 @@ export default function MergeResult({ hunks, resolutions, onResolve }) {
           {
             label: 'Accept Current Change',
             cls: 'merge-action-btn merge-action-current',
-            handler: () => onResolveRef.current(cm.hunkIndex, hunksRef.current[cm.hunkIndex].current),
+            handler: () => {
+              const model = editor.getModel();
+              const range = new monaco.Range(cm.markerStart, 1, cm.markerEnd, model.getLineMaxColumn(cm.markerEnd));
+              editor.executeEdits('resolve-conflict', [{
+                range,
+                text: cm.currentLines.join('\n'),
+                forceMoveMarkers: true,
+              }]);
+            },
           },
           {
             label: 'Accept Incoming Change',
             cls: 'merge-action-btn merge-action-incoming',
-            handler: () => onResolveRef.current(cm.hunkIndex, hunksRef.current[cm.hunkIndex].incoming),
+            handler: () => {
+              const model = editor.getModel();
+              const range = new monaco.Range(cm.markerStart, 1, cm.markerEnd, model.getLineMaxColumn(cm.markerEnd));
+              editor.executeEdits('resolve-conflict', [{
+                range,
+                text: cm.incomingLines.join('\n'),
+                forceMoveMarkers: true,
+              }]);
+            },
           },
           {
             label: 'Accept Both Changes',
             cls: 'merge-action-btn merge-action-both',
-            handler: () => onResolveRef.current(cm.hunkIndex, [
-              ...hunksRef.current[cm.hunkIndex].current,
-              ...hunksRef.current[cm.hunkIndex].incoming,
-            ]),
+            handler: () => {
+              const model = editor.getModel();
+              const range = new monaco.Range(cm.markerStart, 1, cm.markerEnd, model.getLineMaxColumn(cm.markerEnd));
+              editor.executeEdits('resolve-conflict', [{
+                range,
+                text: [...cm.currentLines, ...cm.incomingLines].join('\n'),
+                forceMoveMarkers: true,
+              }]);
+            },
           },
           {
             label: 'Compare Changes',
             cls: 'merge-action-btn merge-action-compare',
             handler: () => setCompareInfo({
-              current: hunksRef.current[cm.hunkIndex].current,
-              incoming: hunksRef.current[cm.hunkIndex].incoming,
+              current: cm.currentLines,
+              incoming: cm.incomingLines,
             }),
           },
         ];
@@ -187,9 +215,9 @@ export default function MergeResult({ hunks, resolutions, onResolve }) {
         viewZoneIdsRef.current.push(id);
       });
     });
-  }, [conflictMeta]);
+  }, [conflicts]);
 
-  // Mount handler
+  // Handle editor mount
   function handleEditorMount(editor, monaco) {
     editorRef.current = editor;
     monacoRef.current = monaco;
@@ -200,7 +228,7 @@ export default function MergeResult({ hunks, resolutions, onResolve }) {
       rules: [],
       colors: {
         'editor.background': '#1e1e1e',
-        'editor.lineHighlightBackground': '#00000000',
+        'editor.lineHighlightBackground': '#2d2d30',
         'editorLineNumber.foreground': '#4b5563',
         'editorLineNumber.activeForeground': '#9ca3af',
         'editorCursor.foreground': '#d4d4d4',
@@ -208,31 +236,44 @@ export default function MergeResult({ hunks, resolutions, onResolve }) {
     });
     monaco.editor.setTheme('merge-result-dark');
 
+    editor.setValue(initialText);
+    const parsed = parseConflicts(initialText);
+    setConflicts(parsed);
+    setTotalConflictsInitial(parsed.length);
+    setLinesCount(editor.getModel().getLineCount());
     setEditorReady(true);
-    requestAnimationFrame(() => applyDecorationsAndZones());
+
+    // Track editing dynamically
+    editor.onDidChangeModelContent(() => {
+      const val = editor.getValue();
+      const parsed = parseConflicts(val);
+      setConflicts(parsed);
+      setLinesCount(editor.getModel().getLineCount());
+    });
   }
 
-  // Re-apply when text/decorations change
+  // Reset editor value if hunks prop changes
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !editorReady) return;
+    editor.setValue(initialText);
+    const parsed = parseConflicts(initialText);
+    setConflicts(parsed);
+    setTotalConflictsInitial(parsed.length);
+    setLinesCount(editor.getModel().getLineCount());
+  }, [initialText, editorReady]);
+
+  // Re-apply when conflicts list changes
   useEffect(() => {
     if (!editorReady) return;
-    // Small delay to let Monaco finish updating value
-    const timer = setTimeout(() => applyDecorationsAndZones(), 50);
-    return () => clearTimeout(timer);
-  }, [text, editorReady, applyDecorationsAndZones]);
+    applyDecorationsAndZones();
+  }, [conflicts, editorReady, applyDecorationsAndZones]);
 
-  // Build full text for copy (includes conflict markers for unresolved)
   function buildFullText() {
-    return hunks.map((hunk, i) => {
-      if (hunk.type === 'merged') return hunk.lines.join('\n');
-      if (resolutions[i] !== undefined) return resolutions[i].join('\n');
-      return [
-        '<<<<<<< HEAD',
-        ...hunk.current,
-        '=======',
-        ...hunk.incoming,
-        '>>>>>>> Incoming Change',
-      ].join('\n');
-    }).join('\n');
+    if (editorRef.current) {
+      return editorRef.current.getValue();
+    }
+    return initialText;
   }
 
   async function handleCopy() {
@@ -245,16 +286,15 @@ export default function MergeResult({ hunks, resolutions, onResolve }) {
     }
   }
 
-  // Dynamic editor height based on line count
-  const lineCount = text.split('\n').length + conflictMeta.length * 1.5;
-  const editorHeight = Math.min(Math.max(lineCount * 20 + 48, 200), 600);
+  // Dynamic editor height based on current lines + spacing zones
+  const editorHeight = Math.min(Math.max((linesCount + conflicts.length * 1.5) * 20 + 48, 200), 600);
 
   return (
     <div className="flex flex-col gap-3 animate-fade-in">
       {/* Status bar */}
       <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-editor-surface border border-editor-border">
         <div className="flex items-center gap-2">
-          {totalConflicts === 0 ? (
+          {totalConflictsInitial === 0 ? (
             <>
               <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -282,23 +322,38 @@ export default function MergeResult({ hunks, resolutions, onResolve }) {
         </div>
 
         {/* Progress bar */}
-        {totalConflicts > 0 && (
+        {totalConflictsInitial > 0 && (
           <div className="flex items-center gap-2 ml-2">
             <div className="w-24 h-1.5 bg-editor-border rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500"
-                style={{ width: `${(resolvedCount / totalConflicts) * 100}%` }}
+                style={{ width: `${(resolvedCount / totalConflictsInitial) * 100}%` }}
               />
             </div>
-            <span className="text-xs text-gray-500">{resolvedCount}/{totalConflicts}</span>
+            <span className="text-xs text-gray-500">{resolvedCount}/{totalConflictsInitial}</span>
           </div>
         )}
+
+        {/* Compare Entire Files button */}
+        <button
+          id="compare-entire-files-btn"
+          onClick={() => setCompareInfo({
+            current: currentFile ? currentFile.split('\n') : [],
+            incoming: incomingFile ? incomingFile.split('\n') : [],
+          })}
+          className="ml-auto flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-editor-hover hover:bg-gray-700 border border-editor-border text-gray-400 hover:text-gray-200 transition-all duration-150"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+          </svg>
+          Compare Entire Files
+        </button>
 
         {/* Copy button */}
         <button
           id="copy-result-btn"
           onClick={handleCopy}
-          className="ml-auto flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-editor-hover hover:bg-gray-700 border border-editor-border text-gray-400 hover:text-gray-200 transition-all duration-150"
+          className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-editor-hover hover:bg-gray-700 border border-editor-border text-gray-400 hover:text-gray-200 transition-all duration-150"
         >
           {copied ? (
             <>
@@ -326,8 +381,8 @@ export default function MergeResult({ hunks, resolutions, onResolve }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           <span className="text-xs text-gray-400 font-mono">MERGE RESULT</span>
-          {totalConflicts > 0 && !allResolved && (
-            <span className="text-xs text-gray-600 ml-2">— click actions above each conflict block to resolve</span>
+          {remaining > 0 && (
+            <span className="text-xs text-gray-600 ml-2">— click actions above each conflict block or edit code manually</span>
           )}
         </div>
 
@@ -335,18 +390,15 @@ export default function MergeResult({ hunks, resolutions, onResolve }) {
           <Editor
             height="100%"
             defaultLanguage="javascript"
-            value={text}
             onMount={handleEditorMount}
             theme="vs-dark"
             options={{
-              readOnly: true,
-              domReadOnly: true,
               fontSize: 13,
               fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
               minimap: { enabled: false },
               scrollBeyondLastLine: false,
               lineNumbersMinChars: 3,
-              renderLineHighlight: 'none',
+              renderLineHighlight: 'all',
               padding: { top: 8, bottom: 8 },
               wordWrap: 'on',
               automaticLayout: true,

@@ -8,7 +8,6 @@ export default function App() {
   const [current, setCurrent] = useState('');
   const [incoming, setIncoming] = useState('');
   const [hunks, setHunks] = useState(null);
-  const [resolutions, setResolutions] = useState({});
   const [error, setError] = useState(null);
 
   function handleMerge() {
@@ -16,14 +15,9 @@ export default function App() {
     try {
       const result = threeWayMerge(base, current, incoming);
       setHunks(result);
-      setResolutions({});
     } catch (e) {
       setError(e.message);
     }
-  }
-
-  function handleResolve(hunkIndex, resolvedLines) {
-    setResolutions(prev => ({ ...prev, [hunkIndex]: resolvedLines }));
   }
 
   return (
@@ -103,8 +97,8 @@ export default function App() {
             </h2>
             <MergeResult
               hunks={hunks}
-              resolutions={resolutions}
-              onResolve={handleResolve}
+              currentFile={current}
+              incomingFile={incoming}
             />
           </section>
         )}
