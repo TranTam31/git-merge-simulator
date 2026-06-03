@@ -1,0 +1,85 @@
+.merge-marker-line {
+  background-color: #3e3e4280; /* VSCode border color with opacity */
+  border-top: 1px solid #3e3e42;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.merge-marker-text {
+  color: #6b7280 !important; /* gray-500 */
+}
+
+.merge-current-bg {
+  background-color: #1c4a1c60; /* dark green with opacity */
+}
+
+.merge-incoming-bg {
+  background-color: #1a3a5c60; /* dark blue with opacity */
+}
+
+.merge-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  background-color: #252526; /* editor surface */
+  border-bottom: 1px solid #3e3e42;
+  height: 100%;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 12px;
+  pointer-events: auto;
+}
+
+.merge-action-btn {
+  color: #d4d4d4;
+  text-decoration: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  pointer-events: auto;
+}
+
+.merge-action-btn:hover {
+  background-color: #3e3e42;
+  color: #fff;
+}
+
+.merge-action-current {
+  color: #4ade80; /* green-400 */
+}
+.merge-action-current:hover {
+  background-color: #1c4a1c;
+}
+
+.merge-action-incoming {
+  color: #60a5fa; /* blue-400 */
+}
+.merge-action-incoming:hover {
+  background-color: #1a3a5c;
+}
+
+.merge-action-both {
+  color: #c084fc; /* purple-400 */
+}
+.merge-action-both:hover {
+  background-color: #3b2a4a;
+}
+
+.merge-action-compare {
+  color: #9ca3af; /* gray-400 */
+}
+
+.merge-action-sep {
+  color: #4b5563; /* gray-600 */
+}
+
+/* Ensure Monaco's view-zones container is stacked above the text/line layer so children are clickable */
+.monaco-editor .view-zones {
+  z-index: 10 !important;
+  pointer-events: none !important;
+}
+
+/* Enable pointer events specifically for the child elements inside the view zone */
+.monaco-editor .view-zones > * {
+  pointer-events: auto !important;
+}
