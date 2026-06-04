@@ -1,10 +1,11 @@
-import { mergeDigIn } from 'node-diff3';
+import { diff3Merge } from 'node-diff3';
 
 /**
  * Main 3-way merge function.
  *
- * Uses node-diff3's dig-in merge mode because it matches Git's conflict
- * boundaries more closely than the previous per-line custom merge.
+ * Uses node-diff3 regions and trims only common conflict edges. This keeps
+ * matching lines inside a conflicted region, like Git, while still pulling
+ * identical prefix/suffix lines out of the conflict markers.
  *
  * threeWayMerge(base, current, incoming) -> Hunk[]
  *
@@ -16,9 +17,9 @@ export function threeWayMerge(base, current, incoming) {
   const currentLines = toLines(current);
   const baseLines = toLines(base);
   const incomingLines = toLines(incoming);
-  const result = mergeDigIn(currentLines, baseLines, incomingLines);
+  const result = diff3Merge(currentLines, baseLines, incomingLines);
 
-  return markerLinesToHunks(result.result);
+  return mergeRegionsToHunks(result);
 }
 
 function toLines(str) {
@@ -31,53 +32,69 @@ function toLines(str) {
   return lines;
 }
 
-function markerLinesToHunks(lines) {
+function mergeRegionsToHunks(regions) {
   const hunks = [];
-  let mergedLines = [];
-  let conflict = null;
 
-  function flushMerged() {
-    if (mergedLines.length > 0) {
-      hunks.push({ type: 'merged', lines: mergedLines });
-      mergedLines = [];
+  for (const region of regions) {
+    if (region.ok) {
+      addMerged(hunks, region.ok);
+      continue;
+    }
+
+    if (region.conflict) {
+      addTrimmedConflict(hunks, region.conflict.a, region.conflict.b);
     }
   }
 
-  for (const line of lines) {
-    if (line.startsWith('<<<<<<<')) {
-      flushMerged();
-      conflict = {
-        current: [],
-        incoming: [],
-        side: 'current',
-      };
-      continue;
-    }
-
-    if (line.startsWith('=======') && conflict) {
-      conflict.side = 'incoming';
-      continue;
-    }
-
-    if (line.startsWith('>>>>>>>') && conflict) {
-      hunks.push({
-        type: 'conflict',
-        current: conflict.current,
-        incoming: conflict.incoming,
-      });
-      conflict = null;
-      continue;
-    }
-
-    if (conflict) {
-      conflict[conflict.side].push(line);
-    } else {
-      mergedLines.push(line);
-    }
-  }
-
-  flushMerged();
   return collapseAdjacentMergedHunks(hunks);
+}
+
+function addTrimmedConflict(hunks, currentLines, incomingLines) {
+  let start = 0;
+  let currentEnd = currentLines.length;
+  let incomingEnd = incomingLines.length;
+
+  while (
+    start < currentEnd &&
+    start < incomingEnd &&
+    currentLines[start] === incomingLines[start]
+  ) {
+    start += 1;
+  }
+
+  while (
+    currentEnd > start &&
+    incomingEnd > start &&
+    currentLines[currentEnd - 1] === incomingLines[incomingEnd - 1]
+  ) {
+    currentEnd -= 1;
+    incomingEnd -= 1;
+  }
+
+  addMerged(hunks, currentLines.slice(0, start));
+
+  const currentConflict = currentLines.slice(start, currentEnd);
+  const incomingConflict = incomingLines.slice(start, incomingEnd);
+  if (currentConflict.length > 0 || incomingConflict.length > 0) {
+    hunks.push({
+      type: 'conflict',
+      current: currentConflict,
+      incoming: incomingConflict,
+    });
+  }
+
+  addMerged(hunks, currentLines.slice(currentEnd));
+}
+
+function addMerged(hunks, lines) {
+  if (lines.length === 0) return;
+
+  const previous = hunks[hunks.length - 1];
+  if (previous?.type === 'merged') {
+    previous.lines.push(...lines);
+  } else {
+    hunks.push({ type: 'merged', lines: [...lines] });
+  }
 }
 
 function collapseAdjacentMergedHunks(hunks) {
