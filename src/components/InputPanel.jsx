@@ -9,6 +9,7 @@ const LABELS = {
 };
 
 const LANGUAGE_OPTIONS = [
+  { value: 'auto', label: 'Auto detect' },
   { value: 'javascript', label: 'JavaScript' },
   { value: 'typescript', label: 'TypeScript' },
   { value: 'python', label: 'Python' },
@@ -90,7 +91,7 @@ function EditorPane({
           <select
             value={selectedVariantId}
             onChange={(event) => onSelectVariant(id, event.target.value)}
-            className="min-w-0 flex-1 rounded bg-editor-bg border border-editor-border px-2 py-1 text-xs text-gray-300 outline-none focus:border-gray-500"
+            className="select-control min-w-0 flex-1 rounded bg-editor-bg border border-editor-border px-2 py-1 text-xs text-gray-300 outline-none focus:border-gray-500"
             aria-label={`${meta.title} variant`}
           >
             {variants.map((variant) => (
@@ -159,7 +160,8 @@ export default function InputPanel({
   variants,
   selectedVariantIds,
   language,
-  onLanguageChange,
+  languageMode,
+  onLanguageModeChange,
   onBaseChange,
   onCurrentChange,
   onIncomingChange,
@@ -192,7 +194,7 @@ export default function InputPanel({
         <button
           id="compare-current-base-btn"
           onClick={() => openBaseCompare({ label: 'Current (HEAD)', value: current })}
-          className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-editor-hover hover:bg-gray-700 border border-editor-border text-gray-400 hover:text-gray-200 transition-all duration-150"
+          className="h-[34px] flex items-center gap-2 text-xs px-3 rounded-md bg-editor-hover hover:bg-gray-700 border border-editor-border text-gray-400 hover:text-gray-200 transition-all duration-150"
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -202,7 +204,7 @@ export default function InputPanel({
         <button
           id="compare-incoming-base-btn"
           onClick={() => openBaseCompare({ label: 'Incoming', value: incoming })}
-          className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-editor-hover hover:bg-gray-700 border border-editor-border text-gray-400 hover:text-gray-200 transition-all duration-150"
+          className="h-[34px] flex items-center gap-2 text-xs px-3 rounded-md bg-editor-hover hover:bg-gray-700 border border-editor-border text-gray-400 hover:text-gray-200 transition-all duration-150"
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -210,9 +212,9 @@ export default function InputPanel({
           Compare Base - Incoming
         </button>
         <select
-          value={language}
-          onChange={(event) => onLanguageChange(event.target.value)}
-          className="rounded bg-editor-hover border border-editor-border px-3 py-1.5 text-xs text-gray-300 outline-none hover:bg-gray-700 focus:border-gray-500 transition-colors"
+          value={languageMode}
+          onChange={(event) => onLanguageModeChange(event.target.value)}
+          className="select-control h-[34px] min-w-36 rounded-md bg-editor-hover border border-editor-border px-3 text-xs leading-none text-gray-300 outline-none hover:bg-gray-700 focus:border-gray-500 transition-colors"
           aria-label="Editor language"
         >
           {LANGUAGE_OPTIONS.map((option) => (
@@ -223,7 +225,7 @@ export default function InputPanel({
         </select>
         <button
           onClick={clearAll}
-          className="text-xs text-gray-500 hover:text-gray-300 transition-colors px-2 py-1 rounded hover:bg-editor-hover"
+          className="h-[34px] text-xs text-gray-500 hover:text-gray-300 transition-colors px-3 rounded-md hover:bg-editor-hover"
         >
           Clear all
         </button>

@@ -7,6 +7,28 @@ import { threeWayMerge } from './utils/mergeEngine';
 const STORAGE_KEY = 'git-merge-simulator-workspace-v1';
 const FIELD_IDS = ['base', 'current', 'incoming'];
 const DEFAULT_LANGUAGE = 'javascript';
+const AUTO_LANGUAGE = 'auto';
+
+function detectLanguage(...values) {
+  const text = values.filter(Boolean).join('\n');
+  const trimmed = text.trim();
+
+  if (!trimmed) return DEFAULT_LANGUAGE;
+  if (/^\s*[{[]/.test(trimmed) && /["'][\w-]+["']\s*:/.test(trimmed)) return 'json';
+  if (/<\/?[a-z][\s\S]*>/i.test(trimmed)) return 'html';
+  if (/\b(import\s+[\w*{},\s]+from\s+['"]|export\s+default|const\s+\w+\s*=|let\s+\w+\s*=|=>|require\()['"]?/m.test(trimmed)) return 'javascript';
+  if (/\b(interface|type\s+\w+\s*=|implements|enum)\b/.test(trimmed)) return 'typescript';
+  if (/\b(def|class)\s+\w+\s*\(|from\s+\w+(\.\w+)*\s+import\s+|import\s+\w+|if\s+__name__\s*==\s*['"]__main__['"]|print\s*\(/m.test(trimmed)) return 'python';
+  if (/\bpackage\s+\w+;|\bpublic\s+class\b|\bSystem\.out\.println\b/.test(trimmed)) return 'java';
+  if (/#include\s+<|std::|using\s+namespace\s+std/.test(trimmed)) return 'cpp';
+  if (/\bfunc\s+\w+\s*\(|\bpackage\s+\w+\b/.test(trimmed)) return 'go';
+  if (/\bfn\s+\w+\s*\(|\blet\s+mut\b|println!\s*\(/.test(trimmed)) return 'rust';
+  if (/<\?php|\$\w+\s*=|echo\s+/.test(trimmed)) return 'php';
+  if (/\bSELECT\b[\s\S]+\bFROM\b|\bINSERT\s+INTO\b|\bCREATE\s+TABLE\b/i.test(trimmed)) return 'sql';
+  if (/\b(body|\.?[#a-z][\w-]*)\s*\{[\s\S]*:[\s\S]*;/.test(trimmed)) return 'css';
+
+  return DEFAULT_LANGUAGE;
+}
 
 function createId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -36,6 +58,8 @@ function createCase(name = 'Untitled Case') {
     base: '',
     current: '',
     incoming: '',
+    languageMode: AUTO_LANGUAGE,
+    language: DEFAULT_LANGUAGE,
     variants,
     selectedVariantIds: {
       base: variants.base[0].id,
@@ -76,7 +100,7 @@ function cloneCase(source) {
   };
 }
 
-function normalizeCase(rawCase) {
+function normalizeCase(rawCase, fallbackLanguage = AUTO_LANGUAGE) {
   const fallback = createCase(rawCase?.name || 'Untitled Case');
   const normalized = {
     ...fallback,
@@ -102,6 +126,11 @@ function normalizeCase(rawCase) {
     normalized[field] = rawCase?.[field] ?? selectedVariant.value;
   });
 
+  normalized.languageMode = rawCase?.languageMode || rawCase?.language || fallbackLanguage || AUTO_LANGUAGE;
+  normalized.language = normalized.languageMode === AUTO_LANGUAGE
+    ? detectLanguage(normalized.base, normalized.current, normalized.incoming)
+    : normalized.languageMode;
+
   return normalized;
 }
 
@@ -121,7 +150,7 @@ function loadWorkspace() {
 
     const parsed = JSON.parse(raw);
     const cases = Array.isArray(parsed.cases) && parsed.cases.length > 0
-      ? parsed.cases.map(normalizeCase)
+      ? parsed.cases.map((item) => normalizeCase(item, parsed.language || AUTO_LANGUAGE))
       : fallback.cases;
     const activeCaseId = cases.some((item) => item.id === parsed.activeCaseId)
       ? parsed.activeCaseId
@@ -130,7 +159,6 @@ function loadWorkspace() {
     return {
       cases,
       activeCaseId,
-      language: parsed.language || DEFAULT_LANGUAGE,
     };
   } catch {
     return fallback;
@@ -141,7 +169,6 @@ export default function App() {
   const [initialWorkspace] = useState(() => loadWorkspace());
   const [cases, setCases] = useState(initialWorkspace.cases);
   const [activeCaseId, setActiveCaseId] = useState(initialWorkspace.activeCaseId);
-  const [language, setLanguage] = useState(initialWorkspace.language);
   const [hunks, setHunks] = useState(null);
   const [error, setError] = useState(null);
 
@@ -149,10 +176,12 @@ export default function App() {
   const base = activeCase?.base || '';
   const current = activeCase?.current || '';
   const incoming = activeCase?.incoming || '';
+  const language = activeCase?.language || DEFAULT_LANGUAGE;
+  const languageMode = activeCase?.languageMode || AUTO_LANGUAGE;
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ cases, activeCaseId, language }));
-  }, [cases, activeCaseId, language]);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ cases, activeCaseId }));
+  }, [cases, activeCaseId]);
 
   function updateActiveCase(updater) {
     setCases((prevCases) => prevCases.map((item) => (
@@ -163,7 +192,7 @@ export default function App() {
   function handleFieldChange(field, value) {
     updateActiveCase((item) => {
       const selectedId = item.selectedVariantIds[field];
-      return {
+      const nextCase = {
         ...item,
         [field]: value,
         variants: {
@@ -173,6 +202,13 @@ export default function App() {
           )),
         },
       };
+
+      return {
+        ...nextCase,
+        language: nextCase.languageMode === AUTO_LANGUAGE
+          ? detectLanguage(nextCase.base, nextCase.current, nextCase.incoming)
+          : nextCase.language,
+      };
     });
   }
 
@@ -181,13 +217,20 @@ export default function App() {
       const variant = item.variants[field].find((candidate) => candidate.id === variantId);
       if (!variant) return item;
 
-      return {
+      const nextCase = {
         ...item,
         [field]: variant.value,
         selectedVariantIds: {
           ...item.selectedVariantIds,
           [field]: variantId,
         },
+      };
+
+      return {
+        ...nextCase,
+        language: nextCase.languageMode === AUTO_LANGUAGE
+          ? detectLanguage(nextCase.base, nextCase.current, nextCase.incoming)
+          : nextCase.language,
       };
     });
     setHunks(null);
@@ -220,6 +263,16 @@ export default function App() {
           variant.id === variantId ? { ...variant, name } : variant
         )),
       },
+    }));
+  }
+
+  function handleLanguageModeChange(nextMode) {
+    updateActiveCase((item) => ({
+      ...item,
+      languageMode: nextMode,
+      language: nextMode === AUTO_LANGUAGE
+        ? detectLanguage(item.base, item.current, item.incoming)
+        : nextMode,
     }));
   }
 
@@ -374,7 +427,8 @@ export default function App() {
                 variants={activeCase.variants}
                 selectedVariantIds={activeCase.selectedVariantIds}
                 language={language}
-                onLanguageChange={setLanguage}
+                languageMode={languageMode}
+                onLanguageModeChange={handleLanguageModeChange}
                 onBaseChange={(value) => handleFieldChange('base', value)}
                 onCurrentChange={(value) => handleFieldChange('current', value)}
                 onIncomingChange={(value) => handleFieldChange('incoming', value)}
