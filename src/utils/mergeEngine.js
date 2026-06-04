@@ -1,4 +1,4 @@
-import { diff3Merge } from 'node-diff3';
+import { diff3Merge, diffPatch } from 'node-diff3';
 
 /**
  * Main 3-way merge function.
@@ -19,7 +19,8 @@ export function threeWayMerge(base, current, incoming) {
   const incomingLines = toLines(incoming);
   const result = diff3Merge(currentLines, baseLines, incomingLines);
 
-  return mergeRegionsToHunks(result);
+  const hunks = mergeRegionsToHunks(result);
+  return addMissingDeleteConflicts(hunks, baseLines, currentLines, incomingLines);
 }
 
 function toLines(str) {
@@ -110,4 +111,91 @@ function collapseAdjacentMergedHunks(hunks) {
   }
 
   return collapsed;
+}
+
+function addMissingDeleteConflicts(hunks, baseLines, currentLines, incomingLines) {
+  const incomingPatch = diffPatch(baseLines, incomingLines);
+  let nextHunks = hunks;
+
+  incomingPatch.forEach((patch, index) => {
+    if (patch.buffer1.length === 0 || patch.buffer2.length !== 0) return;
+
+    const previousPatch = incomingPatch[index - 1];
+    if (!previousPatch || previousPatch.buffer1.length !== 0 || previousPatch.buffer2.length === 0) return;
+
+    const deletedLines = patch.buffer1.chunk;
+    const currentIndex = findSubsequence(currentLines, deletedLines);
+    if (currentIndex === -1) return;
+    if (hunksContainLines(nextHunks, deletedLines)) return;
+
+    const nextAnchor = currentLines[currentIndex + deletedLines.length] ?? null;
+    nextHunks = insertConflictBeforeAnchor(nextHunks, nextAnchor, {
+      type: 'conflict',
+      current: deletedLines,
+      incoming: [],
+    });
+  });
+
+  return collapseAdjacentMergedHunks(nextHunks);
+}
+
+function findSubsequence(lines, target) {
+  if (target.length === 0) return -1;
+
+  for (let i = 0; i <= lines.length - target.length; i += 1) {
+    let matches = true;
+    for (let j = 0; j < target.length; j += 1) {
+      if (lines[i + j] !== target[j]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return i;
+  }
+
+  return -1;
+}
+
+function hunksContainLines(hunks, lines) {
+  const mergedAndCurrentLines = [];
+
+  hunks.forEach((hunk) => {
+    if (hunk.type === 'merged') {
+      mergedAndCurrentLines.push(...hunk.lines);
+    } else if (hunk.type === 'conflict') {
+      mergedAndCurrentLines.push(...hunk.current);
+    }
+  });
+
+  return findSubsequence(mergedAndCurrentLines, lines) !== -1;
+}
+
+function insertConflictBeforeAnchor(hunks, anchor, conflictHunk) {
+  if (!anchor) return [...hunks, conflictHunk];
+
+  const nextHunks = [];
+  let inserted = false;
+
+  for (const hunk of hunks) {
+    if (!inserted && hunk.type === 'merged') {
+      const anchorIndex = hunk.lines.indexOf(anchor);
+      if (anchorIndex !== -1) {
+        const before = hunk.lines.slice(0, anchorIndex);
+        const after = hunk.lines.slice(anchorIndex);
+        if (before.length > 0) nextHunks.push({ type: 'merged', lines: before });
+        nextHunks.push(conflictHunk);
+        if (after.length > 0) nextHunks.push({ type: 'merged', lines: after });
+        inserted = true;
+        continue;
+      }
+    }
+
+    nextHunks.push(hunk);
+  }
+
+  if (!inserted) {
+    nextHunks.push(conflictHunk);
+  }
+
+  return nextHunks;
 }
