@@ -1,11 +1,17 @@
-import { useRef, useEffect } from 'react';
+import { useEffect } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
 
 /**
  * CompareDiff — Monaco DiffEditor in a modal overlay.
  * Uses red for deletions and green for additions.
  */
-export default function CompareDiff({ currentLines, incomingLines, onClose }) {
+export default function CompareDiff({
+  currentLines,
+  incomingLines,
+  onClose,
+  originalLabel = 'Current (HEAD)',
+  modifiedLabel = 'Incoming',
+}) {
   const curText = currentLines.join('\n');
   const incText = incomingLines.join('\n');
 
@@ -63,11 +69,11 @@ export default function CompareDiff({ currentLines, incomingLines, onClose }) {
           <div className="ml-auto flex items-center gap-4 mr-2">
             <span className="flex items-center gap-1.5 text-xs">
               <span className="w-2 h-2 rounded-full bg-red-400" />
-              <span className="text-red-400 font-medium">Current (HEAD) — removed</span>
+              <span className="text-red-400 font-medium">{originalLabel} — removed</span>
             </span>
             <span className="flex items-center gap-1.5 text-xs">
               <span className="w-2 h-2 rounded-full bg-green-400" />
-              <span className="text-green-400 font-medium">Incoming — added</span>
+              <span className="text-green-400 font-medium">{modifiedLabel} — added</span>
             </span>
           </div>
 
