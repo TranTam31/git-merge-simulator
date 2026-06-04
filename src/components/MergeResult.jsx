@@ -46,7 +46,7 @@ function parseConflicts(text) {
   return meta;
 }
 
-export default function MergeResult({ hunks, currentFile, incomingFile }) {
+export default function MergeResult({ hunks, currentFile, incomingFile, language = 'javascript' }) {
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const viewZoneIdsRef = useRef([]);
@@ -389,7 +389,7 @@ export default function MergeResult({ hunks, currentFile, incomingFile }) {
         <div style={{ height: editorHeight }}>
           <Editor
             height="100%"
-            defaultLanguage="javascript"
+            language={language}
             onMount={handleEditorMount}
             theme="vs-dark"
             options={{
@@ -421,6 +421,7 @@ export default function MergeResult({ hunks, currentFile, incomingFile }) {
         <CompareDiff
           currentLines={compareInfo.current}
           incomingLines={compareInfo.incoming}
+          language={language}
           onClose={() => setCompareInfo(null)}
         />
       )}

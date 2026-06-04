@@ -21,7 +21,7 @@ Designed with a high-fidelity VSCode aesthetic, the simulator helps developers u
 - **Core**: React 19 + Vite 8
 - **Styling**: Tailwind CSS (Dark Mode-first)
 - **Editor & Diffs**: Monaco Editor (`@monaco-editor/react`)
-- **Diffing Engine**: `diff-match-patch` (enhanced with custom prefix/suffix line boundaries to mirror standard Git behavior)
+- **Diffing Engine**: `node-diff3` with dig-in conflict refinement to mirror Git-style conflict boundaries
 
 ---
 

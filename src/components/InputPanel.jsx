@@ -8,6 +8,24 @@ const LABELS = {
   incoming: { title: 'INCOMING', subtitle: 'Branch to merge in', color: 'text-blue-400', border: 'border-blue-700', badge: 'bg-blue-900/50 text-blue-300', dot: 'bg-blue-400' },
 };
 
+const LANGUAGE_OPTIONS = [
+  { value: 'javascript', label: 'JavaScript' },
+  { value: 'typescript', label: 'TypeScript' },
+  { value: 'python', label: 'Python' },
+  { value: 'json', label: 'JSON' },
+  { value: 'html', label: 'HTML' },
+  { value: 'css', label: 'CSS' },
+  { value: 'java', label: 'Java' },
+  { value: 'csharp', label: 'C#' },
+  { value: 'cpp', label: 'C++' },
+  { value: 'go', label: 'Go' },
+  { value: 'rust', label: 'Rust' },
+  { value: 'php', label: 'PHP' },
+  { value: 'ruby', label: 'Ruby' },
+  { value: 'sql', label: 'SQL' },
+  { value: 'plaintext', label: 'Plain Text' },
+];
+
 const MONACO_OPTIONS = {
   fontSize: 13,
   fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
@@ -35,6 +53,7 @@ function EditorPane({
   onAddVariant,
   onRenameVariant,
   onDeleteVariant,
+  language,
 }) {
   const meta = LABELS[id];
   const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) || variants[0];
@@ -116,7 +135,7 @@ function EditorPane({
       <div className="flex-1 min-h-0">
         <Editor
           height="100%"
-          defaultLanguage="javascript"
+          language={language}
           value={value}
           onChange={(val) => onChange(val || '')}
           onMount={handleEditorDidMount}
@@ -139,6 +158,8 @@ export default function InputPanel({
   incoming,
   variants,
   selectedVariantIds,
+  language,
+  onLanguageChange,
   onBaseChange,
   onCurrentChange,
   onIncomingChange,
@@ -188,6 +209,18 @@ export default function InputPanel({
           </svg>
           Compare Base - Incoming
         </button>
+        <select
+          value={language}
+          onChange={(event) => onLanguageChange(event.target.value)}
+          className="rounded bg-editor-hover border border-editor-border px-3 py-1.5 text-xs text-gray-300 outline-none hover:bg-gray-700 focus:border-gray-500 transition-colors"
+          aria-label="Editor language"
+        >
+          {LANGUAGE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
         <button
           onClick={clearAll}
           className="text-xs text-gray-500 hover:text-gray-300 transition-colors px-2 py-1 rounded hover:bg-editor-hover"
@@ -208,6 +241,7 @@ export default function InputPanel({
           onAddVariant={onAddVariant}
           onRenameVariant={onRenameVariant}
           onDeleteVariant={onDeleteVariant}
+          language={language}
         />
         <EditorPane
           id="current"
@@ -219,6 +253,7 @@ export default function InputPanel({
           onAddVariant={onAddVariant}
           onRenameVariant={onRenameVariant}
           onDeleteVariant={onDeleteVariant}
+          language={language}
         />
         <EditorPane
           id="incoming"
@@ -230,6 +265,7 @@ export default function InputPanel({
           onAddVariant={onAddVariant}
           onRenameVariant={onRenameVariant}
           onDeleteVariant={onDeleteVariant}
+          language={language}
         />
       </div>
 
@@ -254,6 +290,7 @@ export default function InputPanel({
           incomingLines={compareInfo.incoming}
           originalLabel={compareInfo.originalLabel}
           modifiedLabel={compareInfo.modifiedLabel}
+          language={language}
           onClose={() => setCompareInfo(null)}
         />
       )}

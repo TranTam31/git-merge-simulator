@@ -11,6 +11,7 @@ export default function CompareDiff({
   onClose,
   originalLabel = 'Current (HEAD)',
   modifiedLabel = 'Incoming',
+  language = 'javascript',
 }) {
   const curText = currentLines.join('\n');
   const incText = incomingLines.join('\n');
@@ -92,7 +93,7 @@ export default function CompareDiff({
         <div className="flex-1 min-h-0">
           <DiffEditor
             height="100%"
-            language="javascript"
+            language={language}
             original={curText}
             modified={incText}
             onMount={handleEditorDidMount}

@@ -6,6 +6,7 @@ import { threeWayMerge } from './utils/mergeEngine';
 
 const STORAGE_KEY = 'git-merge-simulator-workspace-v1';
 const FIELD_IDS = ['base', 'current', 'incoming'];
+const DEFAULT_LANGUAGE = 'javascript';
 
 function createId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -109,6 +110,7 @@ function loadWorkspace() {
   const fallback = {
     cases: [fallbackCase],
     activeCaseId: fallbackCase.id,
+    language: DEFAULT_LANGUAGE,
   };
 
   if (typeof window === 'undefined') return fallback;
@@ -125,7 +127,11 @@ function loadWorkspace() {
       ? parsed.activeCaseId
       : cases[0].id;
 
-    return { cases, activeCaseId };
+    return {
+      cases,
+      activeCaseId,
+      language: parsed.language || DEFAULT_LANGUAGE,
+    };
   } catch {
     return fallback;
   }
@@ -135,6 +141,7 @@ export default function App() {
   const [initialWorkspace] = useState(() => loadWorkspace());
   const [cases, setCases] = useState(initialWorkspace.cases);
   const [activeCaseId, setActiveCaseId] = useState(initialWorkspace.activeCaseId);
+  const [language, setLanguage] = useState(initialWorkspace.language);
   const [hunks, setHunks] = useState(null);
   const [error, setError] = useState(null);
 
@@ -144,8 +151,8 @@ export default function App() {
   const incoming = activeCase?.incoming || '';
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ cases, activeCaseId }));
-  }, [cases, activeCaseId]);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ cases, activeCaseId, language }));
+  }, [cases, activeCaseId, language]);
 
   function updateActiveCase(updater) {
     setCases((prevCases) => prevCases.map((item) => (
@@ -366,6 +373,8 @@ export default function App() {
                 incoming={incoming}
                 variants={activeCase.variants}
                 selectedVariantIds={activeCase.selectedVariantIds}
+                language={language}
+                onLanguageChange={setLanguage}
                 onBaseChange={(value) => handleFieldChange('base', value)}
                 onCurrentChange={(value) => handleFieldChange('current', value)}
                 onIncomingChange={(value) => handleFieldChange('incoming', value)}
@@ -397,6 +406,7 @@ export default function App() {
                   hunks={hunks}
                   currentFile={current}
                   incomingFile={incoming}
+                  language={language}
                 />
               </section>
             )}
@@ -409,7 +419,7 @@ export default function App() {
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
         </svg>
-        Powered by LCS-based 3-way merge algorithm (diff-match-patch) - Client-side only - No data sent anywhere
+        Powered by diff3-style 3-way merge - Client-side only - No data sent anywhere
       </footer>
     </div>
   );
